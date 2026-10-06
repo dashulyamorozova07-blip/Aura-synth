@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Аура</title>
+    <meta
+      name="description"
+      content="Веб-синтезатор, который рисует ауру звуком"
+    />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap"
+    />
+    <link rel="stylesheet" href="css/reset.css" />
+    <link rel="stylesheet" href="css/style.css" />
+    <script src="https://unpkg.com/tone@15.1.22/build/Tone.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.1/p5.min.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/sequences.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/aura.js"></script>
+    <script src="js/interface.js"></script>
+  </head>
+
+  <body>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="wave-sine" viewBox="0 0 40 20">
+        <path d="M2 10 C 8 -2, 12 -2, 20 10 S 32 22, 38 10" />
+      </symbol>
+      <symbol id="wave-triangle" viewBox="0 0 40 20">
+        <path d="M2 10 L 11 2 L 29 18 L 38 10" />
+      </symbol>
+      <symbol id="wave-square" viewBox="0 0 40 20">
+        <path d="M2 10 V 3 H 20 V 17 H 38 V 10" />
+      </symbol>
+      <symbol id="wave-sawtooth" viewBox="0 0 40 20">
+        <path d="M2 17 L 20 3 V 17 L 38 3" />
+      </symbol>
+      <symbol id="rhythm-calm" viewBox="0 0 40 8">
+        <circle cx="4" cy="4" r="3" />
+        <circle cx="14.5" cy="4" r="1.4" />
+        <circle cx="25" cy="4" r="3" />
+        <circle cx="35.5" cy="4" r="1.4" />
+      </symbol>
+      <symbol id="rhythm-dense" viewBox="0 0 40 8">
+        <circle cx="3" cy="4" r="2.2" />
+        <circle cx="8" cy="4" r="2.2" />
+        <circle cx="13" cy="4" r="2.2" />
+        <circle cx="18" cy="4" r="2.2" />
+        <circle cx="23" cy="4" r="2.2" />
+        <circle cx="28" cy="4" r="2.2" />
+        <circle cx="33" cy="4" r="2.2" />
+        <circle cx="38" cy="4" r="2.2" />
+      </symbol>
+      <filter id="grain-filter">
+        <feTurbulence
+          type="fractalNoise"
+          baseFrequency="0.9"
+          numOctaves="2"
+          stitchTiles="stitch"
+        />
+        <feColorMatrix type="saturate" values="0" />
+      </filter>
+    </svg>
+
+    <!-- Аура: живой фон -->
+    <div class="AuraCanvas" id="aura" aria-hidden="true"></div>
+    <svg class="Grain" id="grain" aria-hidden="true">
+      <rect width="100%" height="100%" filter="url(#grain-filter)" />
+    </svg>
+
+    <span class="Wordmark">аура</span>
+
+    <!-- Общий пульт -->
+    <header class="TopBar">
+      <label class="Fader Fader--compact">
+        <span class="Fader__label">темп</span>
+        <input id="tempoFader" type="range" min="60" max="140" step="1" />
+      </label>
+      <label class="Fader Fader--compact">
+        <span class="Fader__label">общая громкость</span>
+        <input id="masterFader" type="range" min="-40" max="0" step="0.5" />
+      </label>
+      <button class="PlayButton" id="playButton" aria-pressed="false" disabled>
+        Загрузка
+      </button>
+    </header>
+
+    <!-- ЯДРО · синт 1 -->
+    <section class="Voice Voice--left" data-voice="core">
+      <div class="Voice__header">
+        <span class="Voice__dot"></span>
+        <h2 class="Voice__name">Ядро</h2>
+        <button class="ToggleButton" aria-pressed="true">вкл</button>
+      </div>
+
+      <div class="PatternSwitch">
+        <span class="PatternSwitch__label">мелодия</span>
+        <div class="PatternSwitch__buttons">
+          <button data-pattern="I" aria-pressed="true" aria-label="спокойная">
+            <svg><use href="#rhythm-calm" /></svg>
+          </button>
+          <button data-pattern="II" aria-pressed="false" aria-label="плотная">
+            <svg><use href="#rhythm-dense" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="WaveSwitch" role="group" aria-label="Форма волны">
+        <button data-wave="sine" aria-pressed="false" aria-label="синус">
+          <svg><use href="#wave-sine" /></svg>
+        </button>
+        <button
+          data-wave="triangle"
+          aria-pressed="true"
+          aria-label="треугольник"
+        >
+          <svg><use href="#wave-triangle" /></svg>
+        </button>
+        <button data-wave="square" aria-pressed="false" aria-label="квадрат">
+          <svg><use href="#wave-square" /></svg>
+        </button>
+        <button data-wave="sawtooth" aria-pressed="false" aria-label="пила">
+          <svg><use href="#wave-sawtooth" /></svg>
+        </button>
+      </div>
+
+      <div class="Voice__section">
+        <span class="Voice__title">цепочка эффектов</span>
+        <div class="Voice__faders">
+          <label class="Fader"
+            ><span class="Fader__label">хорус</span
+            ><input
+              data-effect="chorus"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+          /></label>
+          <label class="Fader"
+            ><span class="Fader__label">эхо</span
+            ><input
+              data-effect="delay"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+          /></label>
+          <label class="Fader"
+            ><span class="Fader__label">зал</span
+            ><input
+              data-effect="reverb"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+          /></label>
+        </div>
+      </div>
+
+      <div class="Voice__section">
+        <span class="Voice__title">канал</span>
+        <div class="Voice__faders">
+          <label class="Fader"
+            ><span class="Fader__label">громкость</span
+            ><input data-volume type="range" min="-40" max="0" step="0.5"
+          /></label>
+          <label class="Fader"
+            ><span class="Fader__label">панорама</span
+            ><input data-pan type="range" min="-1" max="1" step="0.01"
+          /></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ОРЕОЛ · синт 2 -->
+    <section class="Voice Voice--right" data-voice="halo">
+      <div class="Voice__header">
+        <span class="Voice__dot"></span>
+        <h2 class="Voice__name">Ореол</h2>
+        <button class="ToggleButton" aria-pressed="true">вкл</button>
+      </div>
+
+      <div class="PatternSwitch">
+        <span class="PatternSwitch__label">мелодия</span>
+        <div class="PatternSwitch__buttons">
+          <button data-pattern="I" aria-pressed="true" aria-label="спокойная">
+            <svg><use href="#rhythm-calm" /></svg>
+          </button>
+          <button data-pattern="II" aria-pressed="false" aria-label="плотная">
+            <svg><use href="#rhythm-dense" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="WaveSwitch" role="group" aria-label="Форма волны">
+        <button data-wave="sine" aria-pressed="true" aria-label="синус">
+          <svg><use href="#wave-sine" /></svg>
+        </button>
+        <button
+          data-wave="triangle"
+          aria-pressed="false"
+          aria-label="треугольник"
+        >
+          <svg><use href="#wave-triangle" /></svg>
+        </button>
+        <button data-wave="square" aria-pressed="false" aria-label="квадрат">
+          <svg><use href="#wave-square" /></svg>
+        </button>
+        <button data-wave="sawtooth" aria-pressed="false" aria-label="пила">
+          <svg><use href="#wave-sawtooth" /></svg>
+        </button>
+      </div>
+
+      <div class="Voice__section">
+        <span class="Voice__title">цепочка эффектов</span>
+        <div class="Voice__faders">
+          <label class="Fader"
+            ><span class="Fader__label">искажение</span
+            ><input
+              data-effect="distortion"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+          /></label>
+          <label class="Fader"
+            ><span class="Fader__label">хорус</span
+            ><input
+              data-effect="chorus"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+          /></label>
+          <label class="Fader"
+            ><span class="Fader__label">зал</span
+            ><input
+              data-effect="reverb"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+          /></label>
+        </div>
+      </div>
+
+      <div class="Voice__section">
+        <span class="Voice__title">канал</span>
+        <div class="Voice__faders">
+          <label class="Fader"
+            ><span class="Fader__label">громкость</span
+            ><input data-volume type="range" min="-40" max="0" step="0.5"
+          /></label>
+          <label class="Fader"
+            ><span class="Fader__label">панорама</span
+            ><input data-pan type="range" min="-1" max="1" step="0.01"
+          /></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ПУЛЬС · барабаны -->
+    <section class="Voice Voice--bottom" data-voice="pulse">
+      <div class="Voice__header">
+        <span class="Voice__dot"></span>
+        <h2 class="Voice__name">Пульс</h2>
+      </div>
+
+      <div class="PatternSwitch">
+        <span class="PatternSwitch__label">ритм</span>
+        <div class="PatternSwitch__buttons">
+          <button data-pattern="I" aria-pressed="true" aria-label="спокойный">
+            <svg><use href="#rhythm-calm" /></svg>
+          </button>
+          <button data-pattern="II" aria-pressed="false" aria-label="плотный">
+            <svg><use href="#rhythm-dense" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="Voice__section">
+        <span class="Voice__title">цепочка эффектов</span>
+        <div class="Voice__faders">
+          <label class="Fader"
+            ><span class="Fader__label">крошка</span
+            ><input
+              data-effect="crusher"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+          /></label>
+          <label class="Fader"
+            ><span class="Fader__label">эхо</span
+            ><input
+              data-effect="delay"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+          /></label>
+          <label class="Fader"
+            ><span class="Fader__label">зал</span
+            ><input
+              data-effect="reverb"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+          /></label>
+        </div>
+      </div>
+
+      <div class="Voice__section">
+        <span class="Voice__title">канал</span>
+        <div class="Voice__faders">
+          <label class="Fader"
+            ><span class="Fader__label">громкость</span
+            ><input data-volume type="range" min="-40" max="0" step="0.5"
+          /></label>
+          <label class="Fader"
+            ><span class="Fader__label">панорама</span
+            ><input data-pan type="range" min="-1" max="1" step="0.01"
+          /></label>
+        </div>
+      </div>
+
+      <button class="ToggleButton" aria-pressed="true">вкл</button>
+    </section>
+  </body>
+</html>
