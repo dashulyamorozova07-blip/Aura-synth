@@ -6,12 +6,14 @@ const waveColors = {
 }
 
 const auraColors = {
-  calm: [176, 192, 224],
-  warm: [236, 190, 204],
-  deep: [150, 126, 196],
+  calm: [160, 188, 236], // покой: ясный голубой
+  warm: [248, 176, 184], // тепло: розово-персиковый
+  deep: [96, 58, 150], // гнев: глубокий фиолетовый
+  ember: [196, 70, 112], // гнев: красноватые края экрана
   glow: [251, 232, 176],
   light: [255, 252, 242],
-  mist: [222, 214, 236]
+  mist: [222, 214, 236],
+  frost: [138, 176, 238] // холод: ледяной синий
 }
 
 const auraState = {
@@ -22,14 +24,22 @@ const auraState = {
   coreFlash: 0,
   kick: 0,
   kickTarget: 0,
-  coreColor: [...waveColors.triangle],
-  haloColor: [...waveColors.sine],
-  coreTarget: waveColors.triangle,
-  haloTarget: waveColors.sine,
+  // стартовые цвета берём из волн в настройках
+  coreColor: [...waveColors[coreSynthSettings.oscillator.type]],
+  haloColor: [...waveColors[haloSynthSettings.oscillator.type]],
+  coreTarget: waveColors[coreSynthSettings.oscillator.type],
+  haloTarget: waveColors[haloSynthSettings.oscillator.type],
   harshWave: 0,
   harshTarget: 0,
+  // насколько музыка холодная: 1 холод, 0 тепло
+  cold: masterHarmonySettings.harmony === 'cold' ? 1 : 0,
+  coldTarget: masterHarmonySettings.harmony === 'cold' ? 1 : 0,
   // сколько каждого голоса «видно»: выключенный голос теряет свой цвет
-  presence: { core: 1, halo: 1, pulse: 1 },
+  presence: {
+    core: coreChannelSettings.mute ? 0 : 1,
+    halo: haloChannelSettings.mute ? 0 : 1,
+    pulse: pulseChannelSettings.mute ? 0 : 1
+  },
   // панорама каждого канала: -1 левее, 1 правее
   pan: { core: 0, halo: 0, pulse: 0 },
   effects: { reverb: 0, chorus: 0, echo: 0, distortion: 0, crusher: 0 }
@@ -53,7 +63,15 @@ const bokehCircles = [
 
 // Интерфейс сообщает ауре, какую форму волны выбрали
 const harshWaves = { sine: 0, triangle: 0.2, square: 0.6, sawtooth: 1 }
-const chosenWaves = { core: 'triangle', halo: 'sine' }
+const chosenWaves = {
+  core: coreSynthSettings.oscillator.type,
+  halo: haloSynthSettings.oscillator.type
+}
+
+// стартовая резкость фона тоже по волнам из настроек
+auraState.harshTarget =
+  (harshWaves[chosenWaves.core] + harshWaves[chosenWaves.halo]) / 2
+auraState.harshWave = auraState.harshTarget
 
 function setAuraWave(voiceName, waveType) {
   if (voiceName === 'core') auraState.coreTarget = waveColors[waveType]
@@ -63,6 +81,11 @@ function setAuraWave(voiceName, waveType) {
   chosenWaves[voiceName] = waveType
   auraState.harshTarget =
     (harshWaves[chosenWaves.core] + harshWaves[chosenWaves.halo]) / 2
+}
+
+// Интерфейс сообщает ауре, холодно сейчас или тепло
+function setAuraHarmony(harmonyName) {
+  auraState.coldTarget = harmonyName === 'cold' ? 1 : 0
 }
 
 // Аура слышит ноты: Ядро вспыхивает, Пульс толкает шар
@@ -113,6 +136,7 @@ function listen() {
   s.coreColor = mix(s.coreColor, s.coreTarget, 0.03)
   s.haloColor = mix(s.haloColor, s.haloTarget, 0.03)
   s.harshWave = ease(s.harshWave, s.harshTarget, 0.02)
+  s.cold = ease(s.cold, s.coldTarget, 0.01)
 
   // выключенный голос плавно теряет цвет, панорама сдвигает его часть ауры
   Object.keys(s.presence).forEach((name) => {
@@ -167,21 +191,47 @@ function softOrb(ctx, x, y, radius, squash, angle, stops) {
 //   тишина и спокойные узоры → прохладный голубой
 //   много энергии            → тёплый розово-персиковый
 //   резкий звук (искажение, крошка, пила) → глубокий фиолетовый
+//   холод → фон и свечение вокруг шара синеют
 function drawSky(p, ctx, x, y, radius, time) {
   const s = auraState
   const harsh = clamp(
     s.effects.distortion * 1.2 + s.effects.crusher + s.harshWave * 0.5
   )
 
-  let mood = mix(auraColors.calm, auraColors.warm, s.energy)
-  mood = mix(mood, auraColors.deep, harsh * 0.7)
-  mood = mix(mood, s.haloShown, 0.12)
+  const warmth = 1 - s.cold // в холоде 0, в тепле 1
 
+  let mood = mix(auraColors.calm, auraColors.warm, clamp(s.energy * 1.3))
+  mood = mix(mood, auraColors.frost, s.cold * 0.6) // холод синит фон
+  mood = mix(mood, auraColors.warm, warmth * 0.35) // тепло розовит фон
+  mood = mix(mood, s.haloShown, 0.18)
+  mood = mix(mood, auraColors.deep, harsh * 0.85) // гнев сильнее всего
+
+  // на ударах Пульса фон чуть вспыхивает
+  const flash = s.kick * 0.1
   const sky = ctx.createLinearGradient(0, 0, 0, p.height)
-  sky.addColorStop(0, rgba(mix(mood, auraColors.light, 0.12), 1))
-  sky.addColorStop(1, rgba(mix(mood, s.coreShown, 0.2), 1))
+  sky.addColorStop(
+    0,
+    rgba(mix(mood, auraColors.light, 0.1 * (1 - harsh) + flash), 1)
+  )
+  sky.addColorStop(1, rgba(mix(mood, s.coreShown, 0.12), 1))
   ctx.fillStyle = sky
   ctx.fillRect(0, 0, p.width, p.height)
+
+  // в гневе края экрана темнеют и краснеют
+  if (harsh > 0.01) {
+    const edge = ctx.createRadialGradient(
+      x,
+      y,
+      radius * 1.2,
+      x,
+      y,
+      Math.max(p.width, p.height) * 0.75
+    )
+    edge.addColorStop(0, rgba(auraColors.ember, 0))
+    edge.addColorStop(1, rgba(auraColors.ember, harsh * 0.55))
+    ctx.fillStyle = edge
+    ctx.fillRect(0, 0, p.width, p.height)
+  }
 
   const glow = ctx.createRadialGradient(
     x,
@@ -191,17 +241,18 @@ function drawSky(p, ctx, x, y, radius, time) {
     y,
     radius * (2.6 + s.effects.reverb * 0.8)
   )
-  glow.addColorStop(0, rgba(s.haloShown, 0.55 + s.energy * 0.35))
-  glow.addColorStop(1, rgba(s.haloShown, 0))
+  const glowColor = mix(s.haloShown, auraColors.frost, s.cold * 0.4)
+  glow.addColorStop(0, rgba(glowColor, 0.55 + s.energy * 0.35))
+  glow.addColorStop(1, rgba(glowColor, 0))
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, p.width, p.height)
 
-  drawBokeh(p, ctx, mood, time)
+  drawBokeh(p, ctx, mood, harsh, time)
 }
 
 // Размытые круги: медленно плывут по фону, почти незаметные.
 // Их цвет смешан из настроения и цветов голосов, поэтому меняется вместе с музыкой
-function drawBokeh(p, ctx, mood, time) {
+function drawBokeh(p, ctx, mood, harsh, time) {
   const s = auraState
   const span = Math.max(p.width, p.height)
   const tints = [auraColors.light, s.haloShown, s.coreShown, auraColors.mist]
@@ -218,7 +269,7 @@ function drawBokeh(p, ctx, mood, time) {
     const color = mix(
       mix(mood, tints[i % tints.length], 0.55),
       auraColors.light,
-      0.4
+      0.4 * (1 - harsh * 0.6) // в гневе круги темнее
     )
 
     const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius)
@@ -335,7 +386,8 @@ function startAura(container, grain) {
       drawRings(p, ctx, x, y, radius, time)
       drawOrb(p, ctx, x, y, radius, time)
 
-      grain.style.opacity = String(0.18 + s.effects.crusher * 0.5)
+      // крошка делает звук зернистым, а картинку зернистой
+      grain.style.opacity = String(0.1 + s.effects.crusher * 0.9)
     }
   })
 }

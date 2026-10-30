@@ -2,6 +2,7 @@
   --white: #ffffff;
   --sky: #b7c3dc;
   --rose: #e487ac;
+  --frost: #6f8fc9;
   --glass: rgba(255, 255, 255, 0.2);
   --glass-edge: rgba(255, 255, 255, 0.45);
   --track: rgba(255, 255, 255, 0.3);
@@ -132,6 +133,33 @@ button {
 .PlayButton:disabled {
   opacity: 0.5;
   cursor: wait;
+}
+
+/* ---------- Холод или тепло ---------- */
+
+.HarmonySwitch {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 1.5rem;
+  border: 1px solid var(--track);
+}
+
+.HarmonySwitch button {
+  height: 2.25rem;
+  padding: 0 1rem;
+  border-radius: 1.125rem;
+  font-size: 0.875rem;
+  color: var(--white);
+}
+
+.HarmonySwitch button[aria-pressed='true'] {
+  color: var(--rose);
+  background: var(--white);
+}
+
+.HarmonySwitch button[data-harmony='cold'][aria-pressed='true'] {
+  color: var(--frost);
 }
 
 /* ---------- Голос ---------- */

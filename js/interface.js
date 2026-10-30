@@ -49,7 +49,7 @@ function bindVoice(voiceElement) {
 
   // Форма волны: меняет звук и цвет ауры
   bindChoice(voiceElement.querySelectorAll('[data-wave]'), (button) => {
-    voice.source.set({ oscillator: { type: button.dataset.wave } })
+    setVoiceWave(voiceName, button.dataset.wave)
     setAuraWave(voiceName, button.dataset.wave)
   })
 
@@ -102,6 +102,11 @@ function bindTopBar(master) {
     master.volume.value,
     (value) => master.volume.rampTo(value, 0.05)
   )
+
+  // Холод или тепло: меняет аккорды и цвет ауры
+  bindChoice(document.querySelectorAll('[data-harmony]'), (button) => {
+    setHarmony(button.dataset.harmony)
+  })
 
   // Пробел = играть / стоп
   document.addEventListener('keydown', (event) => {

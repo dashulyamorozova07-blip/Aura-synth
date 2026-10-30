@@ -18,10 +18,47 @@ function createMaster() {
   return masterChannel
 }
 
+// Холод или тепло. Меняет аккорды Ядра и Ореола, Пульс не трогает.
+let masterHarmony = masterHarmonySettings.harmony
+
+// В холоде нота меняется на ноту холодного аккорда с тем же местом,
+// в той же октаве или рядом
+function harmonize(note) {
+  if (masterHarmony === 'warm') return note.noteName
+
+  const bar = Number(note.time.split(':')[0]) % 4
+  const letter = note.noteName.slice(0, -1)
+  const octave = Number(note.noteName.slice(-1))
+  const place = masterHarmonyChords.warm[bar].indexOf(letter)
+  if (place === -1) return note.noteName
+
+  const coldName = masterHarmonyChords.cold[bar][place] + octave
+  const step =
+    Tone.Frequency(coldName).toMidi() - Tone.Frequency(note.noteName).toMidi()
+
+  // не уезжаем дальше, чем на полоктавы
+  if (step > 6) return Tone.Frequency(coldName).transpose(-12).toNote()
+  if (step < -6) return Tone.Frequency(coldName).transpose(12).toNote()
+  return coldName
+}
+
+// Переключаем с начала следующего такта, чтобы аккорд не рвался
+function setHarmony(harmonyName) {
+  const transport = Tone.getTransport()
+
+  if (transport.state !== 'started') masterHarmony = harmonyName
+  else transport.scheduleOnce(() => (masterHarmony = harmonyName), '@1m')
+
+  setAuraHarmony(harmonyName)
+}
+
 function createPart(voiceName, instrument, sequence, loopEnd) {
   const part = new Tone.Part((time, note) => {
+    // у барабанов нет аккордов, их ноты не меняем
+    const noteName = voiceName === 'pulse' ? note.noteName : harmonize(note)
+
     instrument.triggerAttackRelease(
-      note.noteName,
+      noteName,
       note.duration,
       time,
       note.velocity
@@ -51,7 +88,8 @@ function createVoice(voiceName, { source, effects, channel, parts }, master) {
 // ---------- ЯДРО · синт 1 ----------
 
 function createCore(master) {
-  const coreSynth = new Tone.PolySynth(Tone.Synth, coreSynthSettings)
+  // MonoSynth это синтезатор с фильтром, он звучит мягче обычного Synth
+  const coreSynth = new Tone.PolySynth(Tone.MonoSynth, coreSynthSettings)
 
   createVoice(
     'core',
@@ -75,7 +113,7 @@ function createCore(master) {
 // ---------- ОРЕОЛ · синт 2 ----------
 
 function createHalo(master) {
-  const haloSynth = new Tone.PolySynth(Tone.Synth, haloSynthSettings)
+  const haloSynth = new Tone.PolySynth(Tone.MonoSynth, haloSynthSettings)
 
   createVoice(
     'halo',
@@ -121,6 +159,13 @@ function createPulse(master) {
 }
 
 // ---------- УПРАВЛЕНИЕ ----------
+
+// Форма волны: у каждой свой характер (покой, тепло, меланхолия, гнев)
+const waveSettings = { core: coreWaveSettings, halo: haloWaveSettings }
+
+function setVoiceWave(voiceName, waveName) {
+  voices[voiceName].source.set(waveSettings[voiceName][waveName])
+}
 
 function setPattern(voiceName, patternName) {
   Object.entries(voices[voiceName].parts).forEach(([name, part]) => {
